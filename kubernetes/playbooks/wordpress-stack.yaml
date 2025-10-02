@@ -1,0 +1,236 @@
+---
+# kubernetes/playbooks/wordpress-stack.yaml
+# Deploy WordPress with MariaDB on Kubernetes
+
+- name: Deploy WordPress Stack on Kubernetes
+  hosts: localhost
+  gather_facts: no
+  
+  vars:
+    namespace: wordpress
+    db_root_password: "change_me_in_vault"
+    db_name: wordpressdb
+    db_user: wpuser
+    db_password: "change_me_in_vault"
+    wordpress_replicas: 2
+  
+  tasks:
+    - name: Create namespace
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: "{{ namespace }}"
+    
+    - name: Create database secret
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: mariadb-secret
+            namespace: "{{ namespace }}"
+          type: Opaque
+          stringData:
+            root-password: "{{ db_root_password }}"
+            database: "{{ db_name }}"
+            user: "{{ db_user }}"
+            password: "{{ db_password }}"
+    
+    - name: Create MariaDB PVC
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: mariadb-pvc
+            namespace: "{{ namespace }}"
+          spec:
+            accessModes:
+              - ReadWriteOnce
+            resources:
+              requests:
+                storage: 10Gi
+    
+    - name: Create WordPress PVC
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: wordpress-pvc
+            namespace: "{{ namespace }}"
+          spec:
+            accessModes:
+              - ReadWriteOnce
+            resources:
+              requests:
+                storage: 10Gi
+    
+    - name: Deploy MariaDB
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: mariadb
+            namespace: "{{ namespace }}"
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: mariadb
+            template:
+              metadata:
+                labels:
+                  app: mariadb
+              spec:
+                containers:
+                  - name: mariadb
+                    image: mariadb:10.6
+                    env:
+                      - name: MYSQL_ROOT_PASSWORD
+                        valueFrom:
+                          secretKeyRef:
+                            name: mariadb-secret
+                            key: root-password
+                      - name: MYSQL_DATABASE
+                        valueFrom:
+                          secretKeyRef:
+                            name: mariadb-secret
+                            key: database
+                      - name: MYSQL_USER
+                        valueFrom:
+                          secretKeyRef:
+                            name: mariadb-secret
+                            key: user
+                      - name: MYSQL_PASSWORD
+                        valueFrom:
+                          secretKeyRef:
+                            name: mariadb-secret
+                            key: password
+                    ports:
+                      - containerPort: 3306
+                    volumeMounts:
+                      - name: mariadb-storage
+                        mountPath: /var/lib/mysql
+                volumes:
+                  - name: mariadb-storage
+                    persistentVolumeClaim:
+                      claimName: mariadb-pvc
+    
+    - name: Create MariaDB service
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: mariadb
+            namespace: "{{ namespace }}"
+          spec:
+            selector:
+              app: mariadb
+            ports:
+              - port: 3306
+    
+    - name: Deploy WordPress
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: wordpress
+            namespace: "{{ namespace }}"
+          spec:
+            replicas: "{{ wordpress_replicas }}"
+            selector:
+              matchLabels:
+                app: wordpress
+            template:
+              metadata:
+                labels:
+                  app: wordpress
+              spec:
+                containers:
+                  - name: wordpress
+                    image: wordpress:latest
+                    env:
+                      - name: WORDPRESS_DB_HOST
+                        value: mariadb
+                      - name: WORDPRESS_DB_USER
+                        valueFrom:
+                          secretKeyRef:
+                            name: mariadb-secret
+                            key: user
+                      - name: WORDPRESS_DB_PASSWORD
+                        valueFrom:
+                          secretKeyRef:
+                            name: mariadb-secret
+                            key: password
+                      - name: WORDPRESS_DB_NAME
+                        valueFrom:
+                          secretKeyRef:
+                            name: mariadb-secret
+                            key: database
+                    ports:
+                      - containerPort: 80
+                    volumeMounts:
+                      - name: wordpress-storage
+                        mountPath: /var/www/html
+                    resources:
+                      requests:
+                        memory: "256Mi"
+                        cpu: "200m"
+                      limits:
+                        memory: "512Mi"
+                        cpu: "500m"
+                volumes:
+                  - name: wordpress-storage
+                    persistentVolumeClaim:
+                      claimName: wordpress-pvc
+    
+    - name: Create WordPress service
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: wordpress
+            namespace: "{{ namespace }}"
+          spec:
+            type: LoadBalancer
+            selector:
+              app: wordpress
+            ports:
+              - port: 80
+                targetPort: 80
+    
+    - name: Wait for WordPress deployment
+      kubernetes.core.k8s_info:
+        kind: Deployment
+        name: wordpress
+        namespace: "{{ namespace }}"
+      register: wordpress_deployment
+      until: wordpress_deployment.resources[0].status.availableReplicas == wordpress_replicas
+      retries: 20
+      delay: 15
+    
+    - name: Get WordPress service
+      kubernetes.core.k8s_info:
+        kind: Service
+        name: wordpress
+        namespace: "{{ namespace }}"
+      register: wordpress_service
+    
+    - name: Display access information
+      debug:
+        msg: "WordPress will be available at the LoadBalancer IP once provisioned"
