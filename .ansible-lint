@@ -1,0 +1,12 @@
+skip_list:
+  - yaml[line-length]
+  - name[casing]
+  
+exclude_paths:
+  - .venv/
+  - collections/
+  - .github/
+  
+warn_list:
+  - experimental
+  - role-name
