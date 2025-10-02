@@ -1,0 +1,88 @@
+---
+# kubernetes/playbooks/deploy-app.yaml
+# Basic Kubernetes application deployment
+
+- name: Deploy application to Kubernetes
+  hosts: localhost
+  gather_facts: no
+  
+  vars:
+    k8s_namespace: default
+    app_name: myapp
+    app_version: latest
+    container_image: nginx
+    replicas: 2
+    container_port: 80
+    service_type: LoadBalancer
+  
+  tasks:
+    - name: Create namespace
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: "{{ k8s_namespace }}"
+    
+    - name: Deploy application
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: "{{ app_name }}"
+            namespace: "{{ k8s_namespace }}"
+            labels:
+              app: "{{ app_name }}"
+          spec:
+            replicas: "{{ replicas }}"
+            selector:
+              matchLabels:
+                app: "{{ app_name }}"
+            template:
+              metadata:
+                labels:
+                  app: "{{ app_name }}"
+                  version: "{{ app_version }}"
+              spec:
+                containers:
+                  - name: "{{ app_name }}"
+                    image: "{{ container_image }}:{{ app_version }}"
+                    ports:
+                      - containerPort: "{{ container_port }}"
+                    resources:
+                      requests:
+                        memory: "128Mi"
+                        cpu: "100m"
+                      limits:
+                        memory: "256Mi"
+                        cpu: "200m"
+    
+    - name: Create service
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: "{{ app_name }}-service"
+            namespace: "{{ k8s_namespace }}"
+          spec:
+            type: "{{ service_type }}"
+            selector:
+              app: "{{ app_name }}"
+            ports:
+              - port: 80
+                targetPort: "{{ container_port }}"
+    
+    - name: Wait for deployment
+      kubernetes.core.k8s_info:
+        kind: Deployment
+        name: "{{ app_name }}"
+        namespace: "{{ k8s_namespace }}"
+      register: deployment
+      until: deployment.resources[0].status.availableReplicas == replicas
+      retries: 10
+      delay: 30
