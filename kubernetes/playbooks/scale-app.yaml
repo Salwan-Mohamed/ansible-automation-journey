@@ -1,0 +1,48 @@
+---
+# kubernetes/playbooks/scale-app.yaml
+# Scale Kubernetes deployments
+
+- name: Scale Kubernetes deployment
+  hosts: localhost
+  gather_facts: no
+  
+  vars:
+    deployment_name: myapp
+    namespace: default
+    target_replicas: 3
+  
+  tasks:
+    - name: Get current deployment
+      kubernetes.core.k8s_info:
+        kind: Deployment
+        name: "{{ deployment_name }}"
+        namespace: "{{ namespace }}"
+      register: current_deployment
+    
+    - name: Display current replicas
+      debug:
+        msg: "Current replicas: {{ current_deployment.resources[0].spec.replicas }}"
+    
+    - name: Scale deployment
+      kubernetes.core.k8s_scale:
+        kind: Deployment
+        name: "{{ deployment_name }}"
+        namespace: "{{ namespace }}"
+        replicas: "{{ target_replicas }}"
+        wait: yes
+        wait_timeout: 300
+    
+    - name: Verify scaling
+      kubernetes.core.k8s_info:
+        kind: Pod
+        namespace: "{{ namespace }}"
+        label_selectors:
+          - "app={{ deployment_name }}"
+      register: pods
+    
+    - name: Confirm pod count
+      assert:
+        that:
+          - pods.resources | length == target_replicas
+        success_msg: "Successfully scaled to {{ target_replicas }} replicas"
+        fail_msg: "Scaling verification failed"
