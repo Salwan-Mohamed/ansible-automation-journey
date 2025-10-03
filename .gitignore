@@ -1,20 +1,103 @@
+# Ansible specific
 *.retry
-*.pyc
-__pycache__/
+*.log
 .vault_pass
-.DS_Store
-collections/
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 .venv/
 venv/
-*.log
-.ansible/
-.pytest_cache/
-.coverage
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
 *.swp
 *.swo
 *~
-.idea/
-.vscode/
-*.egg-info/
-dist/
-build/
+.DS_Store
+
+# Secrets and credentials
+*secret*
+*password*
+*credential*
+*.pem
+*.key
+*.pub
+.ssh/
+credentials.yml
+secrets.yml
+vault_*.yml
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+~*
+
+# OS specific
+Thumbs.db
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Testing
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Documentation builds
+docs/_build/
+site/
+
+# Ansible retry files
+*.retry
+
+# Collections
+collections/ansible_collections/
+
+# Node modules (if using any JS tools)
+node_modules/
+npm-debug.log*
+
+# Terraform (if mixing IaC tools)
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# Vagrant
+.vagrant/
+
+# Packer
+packer_cache/
